@@ -1,0 +1,358 @@
+/**
+ * pupaphone — Settings app
+ */
+import { t, setLanguage, getLanguage } from '../core/i18n.js';
+import { getGlobal, setGlobal, setGlobalSetting, getChat } from '../core/state.js';
+import { getProfiles, fetchImageModels } from '../core/generator.js';
+import { scanContactsFromHistory, upsertContact } from '../core/rp-bridge.js';
+import { showToast } from '../ui/phone-shell.js';
+
+export function initSettingsApp(el) {
+  el.innerHTML = _build();
+  _wire(el);
+}
+
+function _build() {
+  const settings = getGlobal();
+  const lang = getLanguage();
+  const profiles = getProfiles();
+  const profileOpts = profiles.map(p =>
+    `<option value="${p.name}" ${settings.textProfile === p.name ? 'selected' : ''}>${p.name}</option>`
+  ).join('');
+
+  const loreStatus = _buildLorebookStatus();
+  const npcList = _buildNpcList();
+
+  return `
+  <div class="pupa-app-shell" style="background:#000;">
+    <div class="pupa-nav-bar" style="border-bottom:1px solid #2c2c2e;">
+      <span class="pupa-back-btn" onclick="window.__pupa.goBack()">‹ ${t('home')}</span>
+      <span class="pupa-nav-title">${t('settings_title')}</span>
+    </div>
+    <div class="pupa-app-scroll" style="background:#000;">
+      <div style="padding-bottom:40px;">
+
+        <!-- Телефон -->
+        <div class="pupa-settings-section">
+          <div class="pupa-settings-section-title">${t('phone_section')}</div>
+          <div class="pupa-settings-group">
+            <div class="pupa-settings-row">
+              <div class="pupa-settings-row-icon" style="background:#636366;">👤</div>
+              <span class="pupa-settings-row-label">${t('owner_name')}</span>
+              <span class="pupa-settings-row-value" id="pupa-s-owner-val">${settings.ownerName || 'Игрок'}</span>
+              <span class="pupa-settings-chevron">›</span>
+            </div>
+            <div class="pupa-settings-row" style="cursor:default;">
+              <div class="pupa-settings-row-icon" style="background:#1c1c1e;border:1px solid #636366;">🌐</div>
+              <span class="pupa-settings-row-label">${t('language')}</span>
+              <div style="display:flex;gap:6px;">
+                <span id="pupa-s-lang-ru" onclick="window.__pupa_settings.setLang('ru')"
+                  style="padding:4px 10px;border-radius:8px;font-size:14px;cursor:pointer;
+                  background:${lang === 'ru' ? '#0a84ff' : '#2c2c2e'};
+                  color:${lang === 'ru' ? '#fff' : '#636366'};font-weight:${lang === 'ru' ? '600' : '400'};">RU</span>
+                <span id="pupa-s-lang-en" onclick="window.__pupa_settings.setLang('en')"
+                  style="padding:4px 10px;border-radius:8px;font-size:14px;cursor:pointer;
+                  background:${lang === 'en' ? '#0a84ff' : '#2c2c2e'};
+                  color:${lang === 'en' ? '#fff' : '#636366'};font-weight:${lang === 'en' ? '600' : '400'};">EN</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- API — Текстовая модель -->
+        <div class="pupa-settings-section">
+          <div class="pupa-settings-section-title">${t('api_text')}</div>
+          <div class="pupa-settings-group">
+            <div class="pupa-settings-row" style="cursor:default;">
+              <div class="pupa-settings-row-icon" style="background:#0a84ff;">🔗</div>
+              <span class="pupa-settings-row-label">${t('text_profile')}</span>
+              <select id="pupa-s-profile" onchange="window.__pupa_settings.saveProfile(this.value)"
+                style="background:#2c2c2e;color:#fff;border:none;border-radius:6px;padding:4px 8px;font-size:14px;max-width:160px;">
+                <option value="">${profiles.length === 0 ? 'Нет профилей' : 'Осн. профиль ST'}</option>
+                ${profileOpts}
+              </select>
+            </div>
+            <div class="pupa-settings-row" style="cursor:default;">
+              <div class="pupa-settings-row-icon" style="background:#30d158;">⚡</div>
+              <span class="pupa-settings-row-label">${t('use_main_profile')}</span>
+              <div class="pupa-toggle ${settings.useMainProfile ? '' : 'off'}" id="pupa-s-main-toggle"
+                onclick="window.__pupa_settings.toggleMainProfile()"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- API — Имадж -->
+        <div class="pupa-settings-section">
+          <div class="pupa-settings-section-title">${t('api_img')}</div>
+          <div class="pupa-settings-group">
+            <div class="pupa-settings-row" style="cursor:default;">
+              <div class="pupa-settings-row-icon" style="background:#ff9f0a;">🎨</div>
+              <span class="pupa-settings-row-label">${t('img_provider')}</span>
+              <select id="pupa-s-imgprovider" onchange="window.__pupa_settings.saveImgProvider(this.value)"
+                style="background:#2c2c2e;color:#fff;border:none;border-radius:6px;padding:4px 8px;font-size:14px;">
+                <option value="" ${!settings.imgProvider ? 'selected' : ''}>Не задан</option>
+                <option value="gemini" ${settings.imgProvider === 'gemini' ? 'selected' : ''}>Gemini</option>
+                <option value="openai" ${settings.imgProvider === 'openai' ? 'selected' : ''}>OpenAI</option>
+                <option value="custom" ${settings.imgProvider === 'custom' ? 'selected' : ''}>Custom URL</option>
+              </select>
+            </div>
+            <div class="pupa-settings-row" id="pupa-s-imgurl-row" style="cursor:default;${settings.imgProvider !== 'custom' ? 'display:none;' : ''}">
+              <div class="pupa-settings-row-icon" style="background:#636366;">🔗</div>
+              <span class="pupa-settings-row-label">URL</span>
+              <input id="pupa-s-imgurl" value="${settings.imgUrl || ''}" placeholder="https://..."
+                style="flex:1;background:#2c2c2e;border:1px solid #3a3a3c;border-radius:8px;padding:6px 10px;color:#fff;font-size:14px;outline:none;"
+                onchange="window.__pupa_settings.saveImgUrl(this.value)"/>
+            </div>
+            <div class="pupa-settings-row" style="cursor:default;padding-top:8px;padding-bottom:8px;">
+              <div class="pupa-settings-row-icon" style="background:#5856d6;">🗝️</div>
+              <div style="flex:1;">
+                <div class="pupa-settings-row-label">${t('img_key')}</div>
+                <div style="display:flex;gap:6px;margin-top:6px;">
+                  <input id="pupa-s-imgkey" type="password"
+                    placeholder="${settings.imgKeySecretName ? t('img_key_saved') : t('img_key_placeholder')}"
+                    style="flex:1;background:#2c2c2e;border:1px solid #3a3a3c;border-radius:8px;padding:6px 10px;color:#fff;font-size:14px;font-family:monospace;outline:none;"/>
+                  <button onclick="window.__pupa_settings.saveImgKey()"
+                    style="background:#1c3a5c;color:#0a84ff;border:1px solid #0a4080;border-radius:8px;padding:6px 12px;font-size:13px;cursor:pointer;white-space:nowrap;">
+                    Сохранить
+                  </button>
+                </div>
+              </div>
+            </div>
+            <div class="pupa-settings-row" style="cursor:default;padding-top:8px;padding-bottom:8px;">
+              <div class="pupa-settings-row-icon" style="background:#5856d6;">🤖</div>
+              <div style="flex:1;">
+                <div class="pupa-settings-row-label">${t('img_model')}</div>
+                <div style="display:flex;gap:6px;margin-top:6px;">
+                  <select id="pupa-s-imgmodel" onchange="window.__pupa_settings.saveImgModel(this.value)"
+                    style="flex:1;background:#2c2c2e;color:#fff;border:1px solid #3a3a3c;border-radius:8px;padding:6px 10px;font-size:13px;">
+                    ${settings.imgModel ? `<option value="${settings.imgModel}" selected>${settings.imgModel}</option>` : '<option value="">Не выбрана</option>'}
+                  </select>
+                  <button onclick="window.__pupa_settings.loadModels()"
+                    style="background:#1c3a5c;color:#0a84ff;border:1px solid #0a4080;border-radius:8px;padding:6px 12px;font-size:13px;cursor:pointer;white-space:nowrap;">
+                    ${t('img_load_models')}
+                  </button>
+                </div>
+              </div>
+            </div>
+            <div class="pupa-settings-row" style="cursor:pointer;" onclick="window.__pupa_settings.testImgApi()">
+              <div class="pupa-settings-row-icon" style="background:#30d158;">✓</div>
+              <span class="pupa-settings-row-label" id="pupa-s-imgtest-label">${t('img_test')}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Контекст -->
+        <div class="pupa-settings-section">
+          <div class="pupa-settings-section-title">${t('context_section')}</div>
+          <div class="pupa-settings-group">
+            <div class="pupa-settings-row" style="cursor:default;">
+              <div class="pupa-settings-row-icon" style="background:#30d158;">📱</div>
+              <span class="pupa-settings-row-label">${t('phone_hint')}</span>
+              <div class="pupa-toggle ${settings.hintEnabled ? '' : 'off'}" id="pupa-s-hint-toggle"
+                onclick="window.__pupa_settings.toggleHint()"></div>
+            </div>
+            <div class="pupa-settings-row" style="cursor:default;">
+              <div class="pupa-settings-row-icon" style="background:#636366;">📏</div>
+              <span class="pupa-settings-row-label">${t('injection_depth')}</span>
+              <select id="pupa-s-depth" onchange="window.__pupa_settings.saveDepth(this.value)"
+                style="background:#2c2c2e;color:#fff;border:none;border-radius:6px;padding:4px 8px;font-size:14px;">
+                ${[0,1,2,3,4,5].map(n => `<option value="${n}" ${settings.injectionDepth === n ? 'selected' : ''}>${n}</option>`).join('')}
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- Лорбуки -->
+        <div class="pupa-settings-section">
+          <div class="pupa-settings-section-title">${t('lorebooks_section')}</div>
+          <div class="pupa-settings-group">
+            ${loreStatus}
+            <div class="pupa-settings-row" style="cursor:default;padding-top:10px;padding-bottom:10px;">
+              <span style="font-size:13px;color:#636366;line-height:1.4;">${t('lorebooks_hint')}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Я -->
+        <div class="pupa-settings-section">
+          <div class="pupa-settings-section-title">${t('me_section')}</div>
+          <div class="pupa-settings-group">
+            <div class="pupa-settings-row" style="cursor:default;padding-top:8px;padding-bottom:8px;">
+              <div class="pupa-settings-row-icon" style="background:#bf5af2;">💁</div>
+              <div style="flex:1;">
+                <div class="pupa-settings-row-label">${t('me_appearance')}</div>
+                <div style="font-size:12px;color:#636366;margin-top:2px;">${t('me_appearance_auto')}</div>
+                <textarea id="pupa-s-appearance" placeholder="${t('me_appearance_auto')}"
+                  style="width:100%;margin-top:8px;background:#2c2c2e;border:1px solid #3a3a3c;border-radius:8px;padding:8px;color:#fff;font-size:13px;font-family:inherit;resize:none;height:60px;outline:none;"
+                  onchange="window.__pupa_settings.saveAppearance(this.value)"
+                >${settings.userAppearance || ''}</textarea>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- NPC -->
+        <div class="pupa-settings-section">
+          <div class="pupa-settings-section-title">${t('npc_section')}</div>
+          <div class="pupa-settings-group">
+            <div class="pupa-settings-row" onclick="window.__pupa_settings.scanNpcs()">
+              <div class="pupa-settings-row-icon" style="background:#0a84ff;" id="pupa-s-scan-icon">🔄</div>
+              <div style="flex:1;">
+                <div class="pupa-settings-row-label">${t('npc_scan')}</div>
+                <div style="font-size:12px;color:#636366;margin-top:2px;">${t('npc_scan_sub')}</div>
+              </div>
+            </div>
+            <div id="pupa-s-npc-list">${npcList}</div>
+            <div class="pupa-settings-row" onclick="window.__pupa.showToast('${t('npc_add')} — скоро')"
+              style="border-top:1px solid #3a3a3c;">
+              <div class="pupa-settings-row-icon" style="background:#0a84ff;font-size:20px;font-weight:300;">+</div>
+              <span class="pupa-settings-row-label" style="color:#0a84ff;">${t('npc_add')}</span>
+            </div>
+          </div>
+        </div>
+
+        <div style="height:40px;"></div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function _buildLorebookStatus() {
+  try {
+    const ctx = SillyTavern.getContext();
+    const books = ctx.worldInfoData || {};
+    const names = Object.keys(books);
+    if (names.length === 0) return `<div class="pupa-settings-row" style="cursor:default;"><span style="font-size:13px;color:#636366;">Нет активных лорбуков</span></div>`;
+    return names.map(name => `
+      <div class="pupa-settings-row" style="cursor:default;">
+        <div class="pupa-settings-row-icon" style="background:#30d158;">📖</div>
+        <div style="flex:1;">
+          <div class="pupa-settings-row-label">${name}</div>
+        </div>
+        <span style="font-size:12px;background:#1a3a1a;color:#30d158;padding:3px 8px;border-radius:6px;">${t('active')}</span>
+      </div>`).join('');
+  } catch {
+    return `<div class="pupa-settings-row" style="cursor:default;"><span style="font-size:13px;color:#636366;">Лорбуки загрузятся при открытии чата</span></div>`;
+  }
+}
+
+function _buildNpcList() {
+  const chat = getChat();
+  const contacts = Object.entries(chat.contacts || {});
+  if (contacts.length === 0) return '';
+
+  const sourceLabel = { 'character-card': t('npc_from_card'), 'lorebook': t('npc_from_lore'), 'rp-bridge': t('npc_from_chat') };
+  return contacts.map(([key, c]) => {
+    const initial = (c.displayName || '?')[0].toUpperCase();
+    const src = sourceLabel[c.source] || c.source;
+    return `
+    <div class="pupa-settings-row">
+      <div style="width:30px;height:30px;border-radius:15px;background:linear-gradient(135deg,#5856d6,#af52de);display:flex;align-items:center;justify-content:center;font-size:14px;color:#fff;flex-shrink:0">${initial}</div>
+      <div style="flex:1;">
+        <div class="pupa-settings-row-label">${c.displayName || key}</div>
+        <div style="font-size:12px;color:#636366;margin-top:2px;">${c.canonicalName || ''} · ${src}</div>
+      </div>
+      <span class="pupa-settings-chevron">›</span>
+    </div>`;
+  }).join('');
+}
+
+function _wire(el) {
+  window.__pupa_settings = {
+    setLang: (lang) => {
+      setLanguage(lang);
+      setGlobalSetting('language', lang);
+      // Update toggle styles
+      document.getElementById('pupa-s-lang-ru').style.cssText += `background:${lang==='ru'?'#0a84ff':'#2c2c2e'};color:${lang==='ru'?'#fff':'#636366'};font-weight:${lang==='ru'?'600':'400'};`;
+      document.getElementById('pupa-s-lang-en').style.cssText += `background:${lang==='en'?'#0a84ff':'#2c2c2e'};color:${lang==='en'?'#fff':'#636366'};font-weight:${lang==='en'?'600':'400'};`;
+      showToast(lang === 'ru' ? 'Язык: Русский 🇷🇺' : 'Language: English 🇬🇧');
+    },
+
+    saveProfile: (name) => { setGlobalSetting('textProfile', name); },
+    toggleMainProfile: () => {
+      const s = getGlobal();
+      setGlobalSetting('useMainProfile', !s.useMainProfile);
+      document.getElementById('pupa-s-main-toggle')?.classList.toggle('off', !getGlobal().useMainProfile);
+    },
+    toggleHint: () => {
+      const s = getGlobal();
+      setGlobalSetting('hintEnabled', !s.hintEnabled);
+      document.getElementById('pupa-s-hint-toggle')?.classList.toggle('off', !getGlobal().hintEnabled);
+    },
+    saveDepth: (v) => setGlobalSetting('injectionDepth', parseInt(v, 10)),
+
+    saveImgProvider: (v) => {
+      setGlobalSetting('imgProvider', v);
+      document.getElementById('pupa-s-imgurl-row').style.display = v === 'custom' ? '' : 'none';
+    },
+    saveImgUrl: (v) => setGlobalSetting('imgUrl', v),
+    saveImgModel: (v) => setGlobalSetting('imgModel', v),
+    saveAppearance: (v) => setGlobalSetting('userAppearance', v),
+
+    saveImgKey: async () => {
+      const input = document.getElementById('pupa-s-imgkey');
+      if (!input || !input.value.trim()) return;
+      const key = input.value.trim();
+      const secretName = 'pupaphone_img_key';
+      try {
+        const { writeSecret } = await import('../../../../secrets.js');
+        await writeSecret(secretName, key, 'pupaphone image API key');
+        setGlobalSetting('imgKeySecretName', secretName);
+        input.value = '';
+        input.placeholder = t('img_key_saved');
+        showToast('✅ Ключ сохранён безопасно');
+      } catch (e) {
+        showToast(`Ошибка: ${e.message}`);
+      }
+    },
+
+    loadModels: async () => {
+      showToast(t('img_load_models') + '...');
+      try {
+        const models = await fetchImageModels();
+        const sel = document.getElementById('pupa-s-imgmodel');
+        if (!sel) return;
+        const current = getGlobal().imgModel || '';
+        sel.innerHTML = `<option value="">Выбрать...</option>` +
+          models.map(m => `<option value="${m}" ${m === current ? 'selected' : ''}>${m}</option>`).join('');
+        showToast(`Загружено ${models.length} моделей`);
+      } catch (e) {
+        showToast(`Ошибка: ${e.message}`);
+      }
+    },
+
+    testImgApi: async () => {
+      const lbl = document.getElementById('pupa-s-imgtest-label');
+      if (lbl) lbl.textContent = '⏳ Проверяю...';
+      try {
+        const { generateImage } = await import('../core/generator.js');
+        await generateImage('a small red circle, test image');
+        if (lbl) lbl.textContent = '✅ OK';
+        showToast('Имадж-модель работает!');
+      } catch (e) {
+        if (lbl) lbl.textContent = '❌ Ошибка';
+        showToast(e.message);
+      }
+    },
+
+    scanNpcs: () => {
+      const icon = document.getElementById('pupa-s-scan-icon');
+      if (icon) { icon.style.transform = 'rotate(360deg)'; icon.style.transition = 'transform 0.6s'; }
+      setTimeout(() => {
+        try {
+          const found = scanContactsFromHistory();
+          for (const c of found) {
+            const key = c.displayName.toLowerCase().replace(/\s+/g, '_');
+            upsertContact(key, c);
+          }
+          const list = document.getElementById('pupa-s-npc-list');
+          if (list) list.innerHTML = _buildNpcList();
+          showToast(`✦ Найдено ${found.length} NPC`);
+        } catch (e) {
+          showToast(e.message);
+        }
+        if (icon) { icon.style.transform = ''; icon.style.transition = ''; }
+      }, 600);
+    },
+  };
+}
