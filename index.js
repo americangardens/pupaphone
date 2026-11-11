@@ -3,8 +3,6 @@
  * Entry point loaded by SillyTavern.
  */
 
-console.log('[pupaphone] module loading...');
-
 import {
   eventSource,
   event_types,
@@ -30,9 +28,23 @@ import { initSettingsApp } from './apps/settings.js';
 // ── Boot ──
 // Module is loaded dynamically after page is ready, so DOMContentLoaded already fired.
 // Don't rely on jQuery ready — just run after a tick to let ST finish its own init.
+jQuery(async () => {
+  _boot();
+});
+
 function _boot() {
   try {
     console.log('[pupaphone] boot start');
+
+    // Inject CSS via import.meta.url (same as travelers-folio)
+    const cssId = 'pupaphone-css';
+    if (!document.getElementById(cssId)) {
+      const link = document.createElement('link');
+      link.id = cssId;
+      link.rel = 'stylesheet';
+      link.href = new URL('./ui/styles.css', import.meta.url).href + '?t=' + Date.now();
+      document.head.appendChild(link);
+    }
 
     // Apply saved language
     const settings = getGlobal();
