@@ -2,9 +2,9 @@
  * pupaphone — Settings app
  */
 import { t, setLanguage, getLanguage } from '../core/i18n.js';
-import { getGlobal, setGlobal, setGlobalSetting, getChat } from '../core/state.js';
+import { getGlobal, setGlobal, setGlobalSetting, getChat, upsertContact } from '../core/state.js';
 import { getProfiles, fetchImageModels } from '../core/generator.js';
-import { scanContactsFromHistory, upsertContact } from '../core/rp-bridge.js';
+import { scanContactsFromHistory } from '../core/rp-bridge.js';
 import { showToast } from '../ui/phone-shell.js';
 
 export function initSettingsApp(el) {
