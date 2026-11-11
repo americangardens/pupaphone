@@ -211,6 +211,26 @@ function _build() {
           </div>
         </div>
 
+        <!-- Diagnostics -->
+        <div class="pupa-settings-section">
+          <div class="pupa-settings-section-title">🔧 Диагностика</div>
+          <div class="pupa-settings-group">
+            <div class="pupa-settings-row" style="cursor:default;padding:12px 0;border-bottom:1px solid #3a3a3c;">
+              <div style="flex:1;font-size:13px;line-height:1.5;color:#636366;">
+                <div style="margin-bottom:6px;"><b>Статус:</b> <span style="color:#30d158;">✓ Работает</span></div>
+                <div style="margin-bottom:6px;"><b>Стиль:</b> <span id="pupa-diag-css" style="color:#0a84ff;">✓ Загружен</span></div>
+                <div style="margin-bottom:6px;"><b>Хранилище:</b> <span id="pupa-diag-storage" style="color:#30d158;">✓ OK</span></div>
+                <div><b>Чатов:</b> <span id="pupa-diag-chats">0</span></div>
+              </div>
+            </div>
+            <div class="pupa-settings-row" style="cursor:pointer;" onclick="window.__pupa_settings && window.__pupa_settings.runDiagnostics()">
+              <div class="pupa-settings-row-icon" style="background:#5856d6;font-size:18px;">🔍</div>
+              <span class="pupa-settings-row-label">Запустить проверку</span>
+              <span class="pupa-settings-chevron">›</span>
+            </div>
+          </div>
+        </div>
+
         <div style="height:40px;"></div>
       </div>
     </div>
@@ -353,6 +373,63 @@ function _wire(el) {
         }
         if (icon) { icon.style.transform = ''; icon.style.transition = ''; }
       }, 600);
+    },
+
+    runDiagnostics: () => {
+      const results = [];
+
+      // 1. CSS loaded?
+      const cssEl = document.getElementById('pupaphone-css');
+      const cssOk = !!cssEl;
+      const diag_css = document.getElementById('pupa-diag-css');
+      if (diag_css) {
+        diag_css.textContent = cssOk ? '✓ Загружен' : '✗ Не найден';
+        diag_css.style.color = cssOk ? '#0a84ff' : '#ff453a';
+      }
+      results.push(`CSS: ${cssOk ? 'OK' : 'MISSING'}`);
+
+      // 2. Storage readable?
+      let storageOk = false;
+      try {
+        const s = getGlobal();
+        storageOk = typeof s === 'object';
+      } catch {}
+      const diag_storage = document.getElementById('pupa-diag-storage');
+      if (diag_storage) {
+        diag_storage.textContent = storageOk ? '✓ OK' : '✗ Ошибка';
+        diag_storage.style.color = storageOk ? '#30d158' : '#ff453a';
+      }
+      results.push(`Storage: ${storageOk ? 'OK' : 'ERROR'}`);
+
+      // 3. ST context available?
+      let ctxOk = false;
+      let ctxDetail = '';
+      try {
+        const ctx = SillyTavern.getContext();
+        ctxOk = !!ctx;
+        ctxDetail = ctx.chatId ? ` (чат: ${ctx.chatId.slice(0, 20)}...)` : ' (нет чата)';
+      } catch (e) {
+        ctxDetail = ` (${e.message})`;
+      }
+      results.push(`Context: ${ctxOk ? 'OK' + ctxDetail : 'ERROR' + ctxDetail}`);
+
+      // 4. Chat metadata count
+      try {
+        const ctx = SillyTavern.getContext();
+        const count = Object.keys(ctx.chat_metadata?.pupaphone?.threads || {}).length;
+        const diag_chats = document.getElementById('pupa-diag-chats');
+        if (diag_chats) diag_chats.textContent = count;
+        results.push(`Threads: ${count}`);
+      } catch {}
+
+      // 5. __pupa API
+      const apiOk = typeof window.__pupa === 'object';
+      results.push(`API: ${apiOk ? 'OK' : 'ERROR'}`);
+
+      // Log to console for detailed debug
+      console.log('[pupaphone] Diagnostics:\n' + results.join('\n'));
+
+      showToast(`🔍 ${results.filter(r => !r.includes('ERROR') && !r.includes('MISSING')).length}/${results.length} проверок OK`);
     },
   };
 }
