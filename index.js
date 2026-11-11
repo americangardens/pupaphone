@@ -9,7 +9,6 @@ import {
   eventSource,
   event_types,
 } from '../../../../script.js';
-import { extension_settings } from '../../../../extensions.js';
 
 import { getGlobal, setGlobal, resetChatState } from './core/state.js';
 import { setLanguage } from './core/i18n.js';
