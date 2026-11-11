@@ -18,6 +18,8 @@ import {
   registerApp,
   createAppScreen,
   showToast,
+  openPhone,
+  closePhone,
 } from './ui/phone-shell.js';
 
 import { initSmsApp } from './apps/sms.js';
@@ -258,25 +260,28 @@ function _comingSoon(el, name) {
     </div>`;
 }
 
-// ── ST extensions panel placeholder ──
+// ── ST extensions panel placeholder (guard against double-mount) ──
 function _mountExtensionPanel() {
+  if (document.getElementById('pupa-ext-panel')) return;
   const container = document.getElementById('extensions_settings');
   if (!container) return;
 
   const panel = document.createElement('div');
   panel.id = 'pupa-ext-panel';
-  panel.style.cssText = 'padding:12px 0;';
   panel.innerHTML = `
-    <div style="display:flex;align-items:center;gap:12px;">
-      <div style="font-size:24px;">📱</div>
-      <div>
-        <div style="font-weight:600;">pupaphone</div>
-        <div style="font-size:13px;color:var(--SmartThemeQuoteColor,#888);">Все настройки — внутри телефона ⚙️</div>
+    <div class="inline-drawer">
+      <div class="inline-drawer-toggle inline-drawer-header">
+        <b>📱 pupaphone</b>
+        <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
       </div>
-      <button class="menu_button" style="margin-left:auto;" onclick="document.getElementById('pupa-phone').style.display='flex'">
-        Открыть
-      </button>
+      <div class="inline-drawer-content" style="padding:10px 12px 14px;">
+        <div style="font-size:13px;color:var(--SmartThemeQuoteColor,#888);margin-bottom:10px;">
+          Все настройки внутри телефона ⚙️
+        </div>
+        <button class="menu_button" onclick="window.__pupa && window.__pupa.open()">
+          Открыть телефон
+        </button>
+      </div>
     </div>`;
-
   container.appendChild(panel);
 }
