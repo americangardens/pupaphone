@@ -3,6 +3,8 @@
  * Entry point loaded by SillyTavern.
  */
 
+console.log('[pupaphone] module loading...');
+
 import {
   eventSource,
   event_types,
@@ -28,28 +30,35 @@ import { initSettingsApp } from './apps/settings.js';
 
 // ── Boot ──
 jQuery(async () => {
-  // Apply saved language
-  const settings = getGlobal();
-  setLanguage(settings.language || 'ru');
+  try {
+    console.log('[pupaphone] boot start');
 
-  // Register apps
-  _registerApps();
+    // Apply saved language
+    const settings = getGlobal();
+    setLanguage(settings.language || 'ru');
 
-  // Mount FAB + phone
-  _mountFab();
-  mountPhone();
+    // Register apps
+    _registerApps();
 
-  // Wire ST events
-  initContextInjection();
-  initRpBridge();
+    // Mount FAB + phone
+    _mountFab();
+    mountPhone();
 
-  eventSource.on(event_types.CHAT_CHANGED, () => {
-    resetChatState();
-    // Re-render anything that depends on per-chat data
-  });
+    // Wire ST events
+    initContextInjection();
+    initRpBridge();
 
-  // Add minimal placeholder to ST extensions panel
-  _mountExtensionPanel();
+    eventSource.on(event_types.CHAT_CHANGED, () => {
+      resetChatState();
+    });
+
+    // Add minimal placeholder to ST extensions panel
+    _mountExtensionPanel();
+
+    console.log('[pupaphone] boot OK — FAB and phone mounted');
+  } catch (err) {
+    console.error('[pupaphone] boot error:', err);
+  }
 });
 
 // ── Register all apps ──
