@@ -191,6 +191,44 @@ function _build() {
           </div>
         </div>
 
+        <!-- Wallpaper -->
+        <div class="pupa-settings-section">
+          <div class="pupa-settings-section-title">🖼 Обои</div>
+          <div class="pupa-settings-group">
+            <!-- Preview -->
+            <div class="pupa-settings-row" style="cursor:default;padding:10px 0;">
+              <div id="pupa-wp-preview" style="
+                width:60px;height:100px;border-radius:10px;
+                background:${settings.wallpaper ? `url(${settings.wallpaper}) center/cover` : '#1c1c1e'};
+                filter:blur(${settings.wallpaperBlur || 0}px);
+                border:1px solid #3a3a3c;flex-shrink:0;overflow:hidden;
+              "></div>
+              <div style="flex:1;padding-left:12px;">
+                <div class="pupa-settings-row-label">Фон и обои</div>
+                <div style="font-size:12px;color:#636366;margin-top:2px;">Lock screen и Home screen</div>
+                <label style="display:inline-block;margin-top:8px;padding:6px 14px;background:#0a84ff;color:#fff;border-radius:8px;font-size:13px;cursor:pointer;">
+                  Выбрать фото
+                  <input type="file" accept="image/*" style="display:none;"
+                    onchange="window.__pupa_settings.setWallpaper(this)">
+                </label>
+                ${settings.wallpaper ? `<button onclick="window.__pupa_settings.clearWallpaper()"
+                  style="margin-left:8px;padding:6px 14px;background:#2c2c2e;color:#ff453a;border:1px solid #3a3a3c;border-radius:8px;font-size:13px;cursor:pointer;">Убрать</button>` : ''}
+              </div>
+            </div>
+            <!-- Blur slider -->
+            <div class="pupa-settings-row" style="cursor:default;border-top:1px solid #3a3a3c;">
+              <div class="pupa-settings-row-icon" style="background:#636366;">💧</div>
+              <span class="pupa-settings-row-label">Размытие</span>
+              <div style="display:flex;align-items:center;gap:8px;flex:1;justify-content:flex-end;">
+                <input type="range" min="0" max="20" value="${settings.wallpaperBlur || 0}"
+                  oninput="window.__pupa_settings.setBlur(this.value)"
+                  style="width:120px;accent-color:#0a84ff;">
+                <span id="pupa-wp-blur-val" style="font-size:13px;color:#636366;min-width:28px;text-align:right;">${settings.wallpaperBlur || 0}px</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <!-- NPC -->
         <div class="pupa-settings-section">
           <div class="pupa-settings-section-title">${t('npc_section')}</div>
@@ -373,6 +411,53 @@ function _wire(el) {
         }
         if (icon) { icon.style.transform = ''; icon.style.transition = ''; }
       }, 600);
+    },
+
+    setWallpaper: (input) => {
+      const file = input.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const dataUrl = e.target.result;
+        setGlobalSetting('wallpaper', dataUrl);
+        // Apply to backgrounds
+        document.querySelectorAll('.pupa-lock-wp, .pupa-home-wp').forEach(el => {
+          el.style.backgroundImage = `url(${dataUrl})`;
+        });
+        const blur = getGlobal().wallpaperBlur || 0;
+        document.querySelectorAll('.pupa-lock-wp, .pupa-home-wp').forEach(el => {
+          el.style.filter = blur > 0 ? `blur(${blur}px)` : '';
+        });
+        // Update preview
+        const preview = document.getElementById('pupa-wp-preview');
+        if (preview) preview.style.backgroundImage = `url(${dataUrl})`;
+        showToast('✅ Обои установлены');
+      };
+      reader.readAsDataURL(file);
+    },
+
+    clearWallpaper: () => {
+      setGlobalSetting('wallpaper', '');
+      document.querySelectorAll('.pupa-lock-wp, .pupa-home-wp').forEach(el => {
+        el.style.backgroundImage = '';
+        el.style.filter = '';
+      });
+      const preview = document.getElementById('pupa-wp-preview');
+      if (preview) { preview.style.backgroundImage = ''; preview.style.background = '#1c1c1e'; }
+      showToast('Обои убраны');
+    },
+
+    setBlur: (val) => {
+      const blur = parseInt(val, 10);
+      setGlobalSetting('wallpaperBlur', blur);
+      const wp = getGlobal().wallpaper;
+      document.querySelectorAll('.pupa-lock-wp, .pupa-home-wp').forEach(el => {
+        el.style.filter = blur > 0 ? `blur(${blur}px)` : '';
+      });
+      const preview = document.getElementById('pupa-wp-preview');
+      if (preview) preview.style.filter = blur > 0 ? `blur(${blur}px)` : '';
+      const label = document.getElementById('pupa-wp-blur-val');
+      if (label) label.textContent = `${blur}px`;
     },
 
     runDiagnostics: () => {

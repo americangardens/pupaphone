@@ -93,6 +93,7 @@ export function mountPhone() {
 
   _applyScale();
   _restorePosition();
+  _applyWallpaper();
   _startClock();
   _wireDrag(win);
   _wireNavigation();
@@ -112,6 +113,17 @@ export function togglePhone() {
   const wrap = document.getElementById('pupa-wrap');
   if (!wrap) return;
   wrap.style.display = wrap.style.display === 'none' ? 'block' : 'none';
+}
+
+// ── Wallpaper ──
+function _applyWallpaper() {
+  const s = getGlobal();
+  if (!s.wallpaper) return;
+  const blur = s.wallpaperBlur || 0;
+  document.querySelectorAll('.pupa-lock-wp, .pupa-home-wp').forEach(el => {
+    el.style.backgroundImage = `url(${s.wallpaper})`;
+    el.style.filter = blur > 0 ? `blur(${blur}px)` : '';
+  });
 }
 
 // ── Scale ──
