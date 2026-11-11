@@ -36,12 +36,11 @@ export function mountPhone() {
   const win = document.createElement('div');
   win.id = 'pupa-win';
   win.innerHTML = `
-    <div id="pupa-titlebar">
-      <span style="font-size:16px;">📱</span>
-      <span style="flex:1;font-size:13px;font-weight:600;color:#fff;">pupaphone</span>
-      <button class="pupa-tb-btn" onclick="window.__pupa.scaleDown()" title="Уменьшить">−</button>
-      <button class="pupa-tb-btn" onclick="window.__pupa.scaleUp()" title="Увеличить">+</button>
-      <button class="pupa-tb-btn pupa-tb-close" onclick="window.__pupa.close()" title="Закрыть">✕</button>
+    <div id="pupa-drag-handle"></div>
+    <button id="pupa-close-btn" onclick="window.__pupa.close()" title="Закрыть">✕</button>
+    <div id="pupa-scale-controls">
+      <button class="pupa-scale-btn" onclick="window.__pupa.scaleDown()" title="Уменьшить">−</button>
+      <button class="pupa-scale-btn" onclick="window.__pupa.scaleUp()" title="Увеличить">+</button>
     </div>
     <div id="pupa-frame-wrap">
       <div id="pupa-phone-frame">
@@ -172,21 +171,20 @@ function _clamp() {
   win.style.right = 'auto'; win.style.bottom = 'auto';
 }
 
-// ── Drag titlebar ──
+// ── Drag handle ──
 function _wireDrag(win) {
-  const tb = document.getElementById('pupa-titlebar');
-  if (!tb) return;
+  const handle = document.getElementById('pupa-drag-handle');
+  if (!handle) return;
   let dr = false, sx = 0, sy = 0, ox = 0, oy = 0, moved = false;
 
-  tb.addEventListener('pointerdown', e => {
-    if (e.target.tagName === 'BUTTON') return;
+  handle.addEventListener('pointerdown', e => {
     const r = win.getBoundingClientRect();
     sx = e.clientX; sy = e.clientY; ox = r.left; oy = r.top;
     dr = true; moved = false;
-    tb.setPointerCapture(e.pointerId);
-    tb.style.cursor = 'grabbing';
+    handle.setPointerCapture(e.pointerId);
+    handle.style.cursor = 'grabbing';
   });
-  tb.addEventListener('pointermove', e => {
+  handle.addEventListener('pointermove', e => {
     if (!dr) return;
     const dx = e.clientX - sx, dy = e.clientY - sy;
     if (!moved && Math.abs(dx) + Math.abs(dy) < 4) return;
@@ -197,8 +195,8 @@ function _wireDrag(win) {
     win.style.left = `${nx}px`; win.style.top = `${ny}px`;
     win.style.right = 'auto'; win.style.bottom = 'auto';
   });
-  tb.addEventListener('pointerup', () => {
-    if (!dr) return; dr = false; tb.style.cursor = '';
+  handle.addEventListener('pointerup', () => {
+    if (!dr) return; dr = false; handle.style.cursor = 'grab';
     if (moved) { const r = win.getBoundingClientRect(); setGlobal({ winX: r.left, winY: r.top }); }
   });
 }
