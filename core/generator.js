@@ -85,10 +85,10 @@ export async function generate(prompt, opts = {}) {
  * @returns {Array<{name: string, id: string}>}
  */
 export function getProfiles() {
-  return SillyTavern.getContext()?.extensionSettings?.connectionManager?.profiles?.map(p => ({
-    name: p.name,
-    id: p.id,
-  })) || [];
+  // extension_settings is the same object as SillyTavern.getContext().extensionSettings
+  const profiles = extension_settings?.connectionManager?.profiles;
+  if (!Array.isArray(profiles)) return [];
+  return profiles.map(p => ({ name: p.name, id: p.id ?? p.name }));
 }
 
 // ── Image generation ──
@@ -200,11 +200,16 @@ export async function fetchImageModels() {
         headers: { 'Content-Type': 'application/json', ...SillyTavern.getContext().getRequestHeaders() },
         body: JSON.stringify({ key: imgKeySecretName }),
       });
+      if (res.status === 403) {
+        throw new Error('Ключ скрыт SillyTavern. Включи allowKeysExposure: true в config.yaml');
+      }
       if (res.ok) apiKey = (await res.json()).value || '';
-    } catch {}
+    } catch (e) {
+      if (e.message.includes('allowKeysExposure')) throw e;
+    }
   }
 
-  if (!apiKey) return [];
+  if (!apiKey) throw new Error('Нет ключа. Укажи его и нажми «Сохранить».');
 
   if (imgProvider === 'gemini') {
     const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);

@@ -6,6 +6,7 @@ import { getGlobal, setGlobal, setGlobalSetting, getChat, upsertContact } from '
 import { getProfiles, fetchImageModels } from '../core/generator.js';
 import { scanContactsFromHistory } from '../core/rp-bridge.js';
 import { showToast } from '../ui/phone-shell.js';
+import { writeSecret } from '../../../../secrets.js';
 
 export function initSettingsApp(el) {
   el.innerHTML = _build();
@@ -115,6 +116,9 @@ function _build() {
                     style="background:#1c3a5c;color:#0a84ff;border:1px solid #0a4080;border-radius:8px;padding:6px 12px;font-size:13px;cursor:pointer;white-space:nowrap;">
                     Сохранить
                   </button>
+                </div>
+                <div id="pupa-s-imgkey-hint" style="display:none;font-size:12px;color:#ff9f0a;margin-top:8px;line-height:1.5;">
+                  ⚠️ Включи <code>allowKeysExposure: true</code> в <code>config.yaml</code>, чтобы расширение могло использовать ключ для генерации картинок.
                 </div>
               </div>
             </div>
@@ -258,6 +262,7 @@ function _build() {
                 <div style="margin-bottom:6px;"><b>Статус:</b> <span style="color:#30d158;">✓ Работает</span></div>
                 <div style="margin-bottom:6px;"><b>Стиль:</b> <span id="pupa-diag-css" style="color:#0a84ff;">✓ Загружен</span></div>
                 <div style="margin-bottom:6px;"><b>Хранилище:</b> <span id="pupa-diag-storage" style="color:#30d158;">✓ OK</span></div>
+                <div style="margin-bottom:6px;"><b>Имадж ключ:</b> <span id="pupa-diag-imgkey" style="color:#636366;">— не проверен</span></div>
                 <div><b>Чатов:</b> <span id="pupa-diag-chats">0</span></div>
               </div>
             </div>
@@ -353,12 +358,27 @@ function _wire(el) {
       const key = input.value.trim();
       const secretName = 'pupaphone_img_key';
       try {
-        const { writeSecret } = await import('../../../../secrets.js');
         await writeSecret(secretName, key, 'pupaphone image API key');
         setGlobalSetting('imgKeySecretName', secretName);
         input.value = '';
         input.placeholder = t('img_key_saved');
-        showToast('✅ Ключ сохранён безопасно');
+
+        // Probe allowKeysExposure — if 403, tell the user
+        const ctx = SillyTavern.getContext();
+        const probe = await fetch('/api/secrets/find', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...ctx.getRequestHeaders() },
+          body: JSON.stringify({ key: secretName }),
+        });
+        if (probe.status === 403) {
+          showToast('✅ Ключ сохранён. Для генерации включи allowKeysExposure: true в config.yaml');
+          const lbl = document.getElementById('pupa-s-imgkey-hint');
+          if (lbl) { lbl.style.display = 'block'; lbl.style.color = '#ff9f0a'; }
+        } else {
+          showToast('✅ Ключ сохранён и доступен');
+          const lbl = document.getElementById('pupa-s-imgkey-hint');
+          if (lbl) lbl.style.display = 'none';
+        }
       } catch (e) {
         showToast(`Ошибка: ${e.message}`);
       }
@@ -460,7 +480,7 @@ function _wire(el) {
       if (label) label.textContent = `${blur}px`;
     },
 
-    runDiagnostics: () => {
+    runDiagnostics: async () => {
       const results = [];
 
       // 1. CSS loaded?
@@ -510,6 +530,36 @@ function _wire(el) {
       // 5. __pupa API
       const apiOk = typeof window.__pupa === 'object';
       results.push(`API: ${apiOk ? 'OK' : 'ERROR'}`);
+
+      // 6. Image API key accessible?
+      try {
+        const s = getGlobal();
+        if (!s.imgKeySecretName) {
+          results.push('Image key: NOT SET');
+          const lbl = document.getElementById('pupa-diag-imgkey');
+          if (lbl) { lbl.textContent = '— не задан'; lbl.style.color = '#636366'; }
+        } else {
+          const ctx = SillyTavern.getContext();
+          const res = await fetch('/api/secrets/find', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...ctx.getRequestHeaders() },
+            body: JSON.stringify({ key: s.imgKeySecretName }),
+          });
+          const lbl = document.getElementById('pupa-diag-imgkey');
+          if (res.status === 403) {
+            results.push('Image key: BLOCKED (allowKeysExposure=false)');
+            if (lbl) { lbl.textContent = '⚠️ закрыт (allowKeysExposure)'; lbl.style.color = '#ff9f0a'; }
+          } else if (res.ok) {
+            results.push('Image key: OK');
+            if (lbl) { lbl.textContent = '✓ доступен'; lbl.style.color = '#30d158'; }
+          } else {
+            results.push(`Image key: NOT FOUND (${res.status})`);
+            if (lbl) { lbl.textContent = '✗ не найден'; lbl.style.color = '#ff453a'; }
+          }
+        }
+      } catch (e) {
+        results.push(`Image key: ERROR (${e.message})`);
+      }
 
       // Log to console for detailed debug
       console.log('[pupaphone] Diagnostics:\n' + results.join('\n'));
