@@ -28,7 +28,9 @@ import { initBankApp } from './apps/bank.js';
 import { initSettingsApp } from './apps/settings.js';
 
 // ── Boot ──
-jQuery(async () => {
+// Module is loaded dynamically after page is ready, so DOMContentLoaded already fired.
+// Don't rely on jQuery ready — just run after a tick to let ST finish its own init.
+function _boot() {
   try {
     console.log('[pupaphone] boot start');
 
@@ -58,7 +60,14 @@ jQuery(async () => {
   } catch (err) {
     console.error('[pupaphone] boot error:', err);
   }
-});
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', _boot);
+} else {
+  // DOM is already ready — wait one tick so ST modules can finish init
+  setTimeout(_boot, 0);
+}
 
 // ── Register all apps ──
 function _registerApps() {
